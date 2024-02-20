@@ -11,7 +11,6 @@ namespace MonogameUltralight
     {
         private UltralightNet.View _view;
         private UltralightNet.Renderer _renderer;
-        private UltralightNet.View _inspectorView;
 
         RenderTarget2D renderTarget;
         Rectangle renderTargetDestination;
@@ -38,10 +37,6 @@ namespace MonogameUltralight
 
             // Create View
             _view = _renderer.CreateView((uint)GraphicsDevice.Viewport.Bounds.Width, (uint)GraphicsDevice.Viewport.Bounds.Height);
-
-            //_view.CreateLocalInspectorView();
-            //_inspectorView = _view.CreateLocalInspectorView();
-            //_inspectorView.
 
             base.Initialize();
         }
