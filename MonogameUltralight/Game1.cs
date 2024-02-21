@@ -12,9 +12,9 @@ namespace MonogameUltralight
         private UltralightNet.View _view;
         private UltralightNet.Renderer _renderer;
 
-        RenderTarget2D renderTarget;
-        Rectangle renderTargetDestination;
-        Texture2D _bitmapTexture; // Your UltralightNet raw bitmap data (loaded as a Texture2D)
+        private RenderTarget2D renderTarget;
+        private Rectangle renderTargetDestination;
+        private Texture2D _bitmapTexture; // Your UltralightNet raw bitmap data (loaded as a Texture2D)
 
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
@@ -29,6 +29,8 @@ namespace MonogameUltralight
         protected override void Initialize()
         {
             // Set Font Loader
+            AppCoreMethods.ulEnableDefaultLogger("./ulLog.txt");
+            AppCoreMethods.ulEnablePlatformFileSystem("./Content");
             AppCoreMethods.SetPlatformFontLoader();
 
             // Create Renderer
@@ -54,7 +56,8 @@ namespace MonogameUltralight
 
             // Load an HTML page
             //_view.HTML = "<html><body><h1>Hello, Ultralight in MonoGame!</h1></body></html>";
-            _view.URL = "https://www.google.fr/";
+            //_view.URL = "https://www.google.fr/";
+            _view.URL = "file:///helloworld.html";
         }
 
         private void MouseEventsToUltralight()

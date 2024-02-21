@@ -13,3 +13,12 @@
 
 #---------------------------------- Content ---------------------------------#
 
+#begin helloworld.html
+/copy:helloworld.html
+
+#begin resources/cacert.pem
+/copy:resources/cacert.pem
+
+#begin resources/icudt67l.dat
+/copy:resources/icudt67l.dat
+
