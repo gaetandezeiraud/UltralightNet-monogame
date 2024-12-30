@@ -149,9 +149,16 @@ namespace MonogameUltralight
             // Get Surface
             ULSurface surface = _view.Surface ?? throw new Exception("Surface not found, did you perhaps set ViewConfig.IsAccelerated to true?");
 
-            // Get Bitmap
             ULBitmap bitmap = surface.Bitmap;
-            _bitmapTexture = CreateTextureFromBytePointer(GraphicsDevice, bitmap.RawPixels, (int)bitmap.Width, (int)bitmap.Height);
+            try
+            {
+                _bitmapTexture?.Dispose(); // Dispose of the old texture to avoid leaks
+                _bitmapTexture = CreateTextureFromBytePointer(GraphicsDevice, bitmap.RawPixels, (int)bitmap.Width, (int)bitmap.Height);
+            }
+            finally
+            {
+                bitmap.Dispose(); // Free bitmap memory
+            }
 
             // Draw your bitmap onto the render target
             _spriteBatch.Begin();
