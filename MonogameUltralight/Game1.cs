@@ -12,10 +12,11 @@ namespace MonogameUltralight
         private UltralightNet.View _view;
         private UltralightNet.Renderer _renderer;
 
-        private RenderTarget2D renderTarget;
-        private Rectangle renderTargetDestination;
+        private RenderTarget2D _renderTarget;
+        private Rectangle _renderTargetDestination;
         private Texture2D _bitmapTexture; // Your UltralightNet raw bitmap data (loaded as a Texture2D)
 
+        private KeyboardState _previousKeyboardState;
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
 
@@ -38,7 +39,9 @@ namespace MonogameUltralight
             _renderer = ULPlatform.CreateRenderer(cfg);
 
             // Create View
-            _view = _renderer.CreateView((uint)GraphicsDevice.Viewport.Bounds.Width, (uint)GraphicsDevice.Viewport.Bounds.Height);
+            ULViewConfig viewConfig = new ULViewConfig();
+            viewConfig.IsTransparent = true;
+            _view = _renderer.CreateView((uint)GraphicsDevice.Viewport.Bounds.Width, (uint)GraphicsDevice.Viewport.Bounds.Height, viewConfig);
 
             base.Initialize();
         }
@@ -47,11 +50,11 @@ namespace MonogameUltralight
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
 
-            renderTarget = new RenderTarget2D(GraphicsDevice, GraphicsDevice.Viewport.Bounds.Width, GraphicsDevice.Viewport.Bounds.Height);
-            renderTargetDestination = GetRenderTargetDestination(
+            _renderTarget = new RenderTarget2D(GraphicsDevice, GraphicsDevice.Viewport.Bounds.Width, GraphicsDevice.Viewport.Bounds.Height);
+            _renderTargetDestination = GetRenderTargetDestination(
                 new Point(GraphicsDevice.Viewport.Bounds.Width, GraphicsDevice.Viewport.Bounds.Height),
-                renderTarget.Width,
-                renderTarget.Height
+                _renderTarget.Width,
+                _renderTarget.Height
             );
 
             // Load an HTML page
@@ -64,23 +67,114 @@ namespace MonogameUltralight
         {
             var mouseState = Mouse.GetState();
 
-            ULMouseEvent uLMouseEvent = new ULMouseEvent();
-            uLMouseEvent.X = mouseState.X;
-            uLMouseEvent.Y = mouseState.Y;
+            // Move
+            ULMouseEvent uLMouseMovedEvent = new ULMouseEvent();
+            uLMouseMovedEvent.X = (int)(mouseState.X / _view.DeviceScale);
+            uLMouseMovedEvent.Y = (int)(mouseState.Y / _view.DeviceScale);
+            uLMouseMovedEvent.Type = ULMouseEventType.MouseMoved;
+            _view.FireMouseEvent(uLMouseMovedEvent);
 
+            // Left button
             if (mouseState.LeftButton == ButtonState.Pressed)
             {
+                ULMouseEvent uLMouseEvent = new ULMouseEvent();
+                uLMouseEvent.X = (int)(mouseState.X / _view.DeviceScale);
+                uLMouseEvent.Y = (int)(mouseState.Y / _view.DeviceScale);
+
                 uLMouseEvent.Type = ULMouseEventType.MouseDown;
                 uLMouseEvent.Button = ULMouseEventButton.Left;
+                _view.FireMouseEvent(uLMouseEvent);
+            }
+            else if (mouseState.LeftButton == ButtonState.Released)
+            {
+                ULMouseEvent uLMouseEvent = new ULMouseEvent();
+                uLMouseEvent.X = (int)(mouseState.X / _view.DeviceScale);
+                uLMouseEvent.Y = (int)(mouseState.Y / _view.DeviceScale);
+
+                uLMouseEvent.Type = ULMouseEventType.MouseUp;
+                uLMouseEvent.Button = ULMouseEventButton.Left;
+                _view.FireMouseEvent(uLMouseEvent);
             }
 
-            _view.FireMouseEvent(uLMouseEvent);
+            // Scroll
+            if (mouseState.ScrollWheelValue != 0)
+            {
+                ULScrollEvent uLScrollEvent = new ULScrollEvent();
+                uLScrollEvent.DeltaY = (int)(mouseState.ScrollWheelValue);
+                _view.FireScrollEvent(uLScrollEvent);
+            }
+        }
+
+        private void KeyboardEventsToUltralight()
+        {
+            // Capture current and previous keyboard states
+            var keyboardState = Keyboard.GetState();
+            var previousKeyboardState = _previousKeyboardState; // Store and update this every frame
+
+            foreach (Keys key in Enum.GetValues(typeof(Keys)))
+            {
+                bool isKeyDown = keyboardState.IsKeyDown(key);
+                bool wasKeyDown = previousKeyboardState.IsKeyDown(key);
+
+                // Key Pressed Event
+                if (isKeyDown && !wasKeyDown)
+                {
+                    FireUltralightKeyEvent(key, ULKeyEventType.RawKeyDown);
+                }
+
+                // Key Released Event
+                if (!isKeyDown && wasKeyDown)
+                {
+                    FireUltralightKeyEvent(key, ULKeyEventType.KeyUp);
+                }
+
+                // Character Input (optional, based on your use case)
+                if (isKeyDown)
+                {
+                    FireUltralightKeyEvent(key, ULKeyEventType.Char);
+                }
+            }
+
+            // Update previous keyboard state
+            _previousKeyboardState = keyboardState;
+        }
+
+        private void FireUltralightKeyEvent(Keys key, ULKeyEventType eventType)
+        {
+            string text = GetKeyText(key); // Convert Keys to a printable character or string (e.g., "A", "1", etc.)
+
+            ULKeyEvent ulKeyEvent = ULKeyEvent.Create(
+                eventType, 0, (int)key, (int)key, text, text, false, false, false);
+
+            _view.FireKeyEvent(ulKeyEvent);
+        }
+
+        private string GetKeyText(Keys key)
+        {
+            // Map Keys to their printable text representation.
+            // Example for alphanumeric keys and basic symbols. Expand as needed.
+            if (key >= Keys.A && key <= Keys.Z)
+            {
+                return key.ToString(); // Example: Keys.A -> "A"
+            }
+            else if (key >= Keys.D0 && key <= Keys.D9)
+            {
+                return ((char)('0' + (key - Keys.D0))).ToString(); // Example: Keys.D0 -> "0"
+            }
+            else if (key == Keys.Space)
+            {
+                return " ";
+            }
+
+            // Add more mappings as needed for other keys (e.g., punctuation, special symbols)
+            return "";
         }
 
         protected override void Update(GameTime gameTime)
         {
             // Update Ultralight
             MouseEventsToUltralight();
+            KeyboardEventsToUltralight();
             _renderer.Update();
 
             base.Update(gameTime);
@@ -116,31 +210,27 @@ namespace MonogameUltralight
 
             int dataLength = width * height * 4; // RGBA format
 
-            // Your byte pointer (stream) containing pixel data
-            byte[] stream = new byte[dataLength];
+            // Allocate managed memory
+            byte[] managedPixels = new byte[dataLength];
 
+            // Copy and adjust pixel data (swapping R and B channels)
             for (int i = 0; i < dataLength; i += 4)
             {
-                // Swap red and blue channels
-                byte red = bytePointer[i];
-                byte blue = bytePointer[i + 2];
-                stream[i] = blue;
-                stream[i + 2] = red;
-
-                // Copy green and alpha channels
-                stream[i + 1] = bytePointer[i + 1];
-                stream[i + 3] = bytePointer[i + 3];
+                managedPixels[i] = bytePointer[i + 2]; // Blue to Red
+                managedPixels[i + 1] = bytePointer[i + 1]; // Green unchanged
+                managedPixels[i + 2] = bytePointer[i]; // Red to Blue
+                managedPixels[i + 3] = bytePointer[i + 3]; // Alpha unchanged
             }
 
-            // Copy data from your byte pointer to the Texture2D
-            texture.SetData(stream);
+            // Set pixel data to texture
+            texture.SetData(managedPixels);
 
             return texture;
         }
 
         protected override unsafe void Draw(GameTime gameTime)
         {
-            GraphicsDevice.SetRenderTarget(renderTarget);
+            GraphicsDevice.SetRenderTarget(_renderTarget);
             GraphicsDevice.Clear(Color.CornflowerBlue);
 
             // Render Ultralight content
@@ -149,6 +239,7 @@ namespace MonogameUltralight
             // Get Surface
             ULSurface surface = _view.Surface ?? throw new Exception("Surface not found, did you perhaps set ViewConfig.IsAccelerated to true?");
 
+            // Get Bitmap
             ULBitmap bitmap = surface.Bitmap;
             try
             {
@@ -167,11 +258,10 @@ namespace MonogameUltralight
 
             // Restore the default render target
             GraphicsDevice.SetRenderTarget(null);
-            GraphicsDevice.Clear(Color.Black);
 
             // Draw the render target to the screen
-            _spriteBatch.Begin();
-            _spriteBatch.Draw(renderTarget, renderTargetDestination, Color.White);
+            _spriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend);
+            _spriteBatch.Draw(_renderTarget, _renderTargetDestination, Color.White);
             _spriteBatch.End();
 
             base.Draw(gameTime);
